@@ -275,6 +275,25 @@ export async function updateComplaintStatus(
 }
 
 /**
+ * Permanently delete a complaint ticket from the database.
+ * The row is removed from the `complaints` table; any ticket whose
+ * `possible_duplicate_of` pointed at it keeps the stale id (duplicates are
+ * never auto-deleted — the dashboard surfaces the relationship for review).
+ * @returns `true` on success; throws on failure.
+ */
+export async function deleteComplaint(ticketId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from(COMPLAINTS_TABLE)
+    .delete()
+    .eq("id", ticketId);
+
+  if (error) {
+    throw new Error(`Failed to delete ticket ${ticketId}: ${error.message}`);
+  }
+  return true;
+}
+
+/**
  * Mark a ticket as a possible duplicate of another by storing the reference id.
  * Does not delete or reject the ticket — it only sets the `possible_duplicate_of`
  * pointer so the dashboard can surface the relationship.

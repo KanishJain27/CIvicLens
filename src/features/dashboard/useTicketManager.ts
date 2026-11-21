@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ComplaintTicket, GetComplaintsOptions, TicketStatus } from '@/types/complaint';
-import { getComplaints, updateComplaintStatus } from '@/services/complaintService';
+import { getComplaints, updateComplaintStatus, deleteComplaint } from '@/services/complaintService';
 import {
   applyFilters,
   computeStats,
@@ -85,6 +85,30 @@ export function useTicketManager(refreshKey: number = 0) {
     [load]
   );
 
+  /** Delete a ticket through the real service, then refresh data. */
+  const deleteTicket = useCallback(
+    async (ticket: ComplaintTicket): Promise<boolean> => {
+      setUpdatingId(ticket.id);
+      // Optimistic removal so the UI responds instantly.
+      setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
+      try {
+        await deleteComplaint(ticket.id);
+        await load(); // re-fetch so stats + list stay authoritative
+        return true;
+      } catch (e) {
+        // Restore the ticket on failure and surface the error.
+        setTickets((prev) => [...prev, ticket]);
+        setError(
+          e instanceof Error ? e.message : 'Failed to delete ticket.'
+        );
+        return false;
+      } finally {
+        setUpdatingId(null);
+      }
+    },
+    [load]
+  );
+
   /** Live, unfiltered tickets — used for stats and category chart. */
   const allTickets = tickets;
 
@@ -114,6 +138,7 @@ export function useTicketManager(refreshKey: number = 0) {
     error,
     updatingId,
     changeStatus,
+    deleteTicket,
     reload: load,
   };
 }

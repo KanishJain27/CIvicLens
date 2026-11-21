@@ -36,6 +36,7 @@ export function ComplaintDashboard({ onSubmitNew, refreshKey = 0 }: ComplaintDas
     error,
     updatingId,
     changeStatus,
+    deleteTicket,
     reload,
   } = useTicketManager(refreshKey + localRefreshKey);
 
@@ -130,6 +131,7 @@ export function ComplaintDashboard({ onSubmitNew, refreshKey = 0 }: ComplaintDas
         ticketsById={ticketsById}
         onInspectDuplicate={inspectDuplicate}
         onStatusChange={changeStatus}
+        onDelete={deleteTicket}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Check, MapPin, Building2, Sparkles, AlertTriangle, Clock, ImageOff } from 'lucide-react';
+import { Copy, Check, MapPin, Building2, Sparkles, AlertTriangle, Clock, ImageOff, Trash2, AlertCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import {
@@ -20,6 +20,8 @@ export interface TicketDetailsProps {
   ticketsById?: Map<string, ComplaintTicket>;
   onInspectDuplicate?: (ticket: ComplaintTicket) => void;
   onStatusChange: (ticket: ComplaintTicket, status: TicketStatus) => Promise<boolean>;
+  /** Permanently delete the ticket. Returns true on success. */
+  onDelete?: (ticket: ComplaintTicket) => Promise<boolean>;
 }
 
 /**
@@ -34,9 +36,14 @@ export function TicketDetails({
   ticketsById,
   onInspectDuplicate,
   onStatusChange,
+  onDelete,
 }: TicketDetailsProps) {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   if (!ticket) return null;
 
@@ -57,6 +64,29 @@ export function TicketDetails({
       await onStatusChange(ticket!, status);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!onDelete || !ticket) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const ok = await onDelete(ticket);
+      if (ok) {
+        setDeleteSuccess(true);
+        setConfirmDelete(false);
+        setTimeout(() => {
+          setDeleteSuccess(false);
+          onClose();
+        }, 1200);
+      } else {
+        setDeleteError('Could not delete the ticket. Please try again.');
+      }
+    } catch {
+      setDeleteError('Could not delete the ticket. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -217,11 +247,77 @@ export function TicketDetails({
       </div>
 
       {/* Footer */}
-      <div className="mt-5 flex justify-end">
+      <div className="mt-5 flex items-center justify-between gap-3">
+        {onDelete && (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              setDeleteError(null);
+              setConfirmDelete(true);
+            }}
+            leftIcon={<Trash2 className="h-4 w-4" />}
+          >
+            Delete
+          </Button>
+        )}
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
       </div>
+
+      {/* Success notification */}
+      {deleteSuccess && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-success-200 bg-success-50 px-4 py-2.5 text-sm font-medium text-success-800">
+          <Check className="h-4 w-4" />
+          Ticket deleted successfully.
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      <Modal
+        open={confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(false)}
+        title="Delete this complaint?"
+        description="This action cannot be undone."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={deleting}
+              onClick={handleDelete}
+              leftIcon={!deleting ? <Trash2 className="h-4 w-4" /> : undefined}
+            >
+              Yes, delete
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-error-600" />
+            <p className="text-sm text-error-700">
+              Ticket{' '}
+              <span className="font-mono font-semibold">{ticket.ticketNumber}</span>{' '}
+              will be permanently removed from the database. Other complaints
+              will not be affected.
+            </p>
+          </div>
+          {deleteError && (
+            <p className="text-sm text-error-600">{deleteError}</p>
+          )}
+        </div>
+      </Modal>
     </Modal>
   );
 }
