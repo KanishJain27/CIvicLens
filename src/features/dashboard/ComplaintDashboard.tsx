@@ -13,6 +13,8 @@ import type { ComplaintTicket } from '@/types/complaint';
 export interface ComplaintDashboardProps {
   /** Navigate to the submit page. */
   onSubmitNew?: () => void;
+  /** Bumped externally (e.g. after a new submission) to force a data reload. */
+  refreshKey?: number;
 }
 
 /**
@@ -21,8 +23,8 @@ export interface ComplaintDashboardProps {
  * status management, urgent complaints panel, category chart, and duplicate
  * warnings — all driven by Member 1's complaint service.
  */
-export function ComplaintDashboard({ onSubmitNew }: ComplaintDashboardProps) {
-  const [refreshKey, setRefreshKey] = useState(0);
+export function ComplaintDashboard({ onSubmitNew, refreshKey = 0 }: ComplaintDashboardProps) {
+  const [localRefreshKey, setLocalRefreshKey] = useState(0);
   const {
     tickets,
     visibleTickets,
@@ -35,7 +37,7 @@ export function ComplaintDashboard({ onSubmitNew }: ComplaintDashboardProps) {
     updatingId,
     changeStatus,
     reload,
-  } = useTicketManager(refreshKey);
+  } = useTicketManager(refreshKey + localRefreshKey);
 
   const [selected, setSelected] = useState<ComplaintTicket | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -61,7 +63,7 @@ export function ComplaintDashboard({ onSubmitNew }: ComplaintDashboardProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setRefreshKey((k) => k + 1)}
+          onClick={() => setLocalRefreshKey((k) => k + 1)}
           leftIcon={<RefreshCw className="h-4 w-4" />}
         >
           Refresh data

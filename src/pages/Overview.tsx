@@ -6,6 +6,8 @@ import type { RouteId } from '@/components/layout/nav';
 
 export interface OverviewProps {
   onNavigate: (route: RouteId) => void;
+  /** Bumped after each new submission so the dashboard reloads its data. */
+  refreshKey?: number;
 }
 
 /**
@@ -13,7 +15,7 @@ export interface OverviewProps {
  * Renders the full live complaint-management dashboard (Member 3) inside
  * Member 2's page layout. All statistics derive from real complaint data.
  */
-export function Overview({ onNavigate }: OverviewProps) {
+export function Overview({ onNavigate, refreshKey }: OverviewProps) {
   return (
     <PageContainer
       title="Overview"
@@ -25,7 +27,7 @@ export function Overview({ onNavigate }: OverviewProps) {
         </Button>
       }
     >
-      <ComplaintDashboard onSubmitNew={() => onNavigate('submit')} />
+      <ComplaintDashboard onSubmitNew={() => onNavigate('submit')} refreshKey={refreshKey} />
     </PageContainer>
   );
 }
