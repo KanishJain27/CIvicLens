@@ -1,0 +1,8 @@
+project_id = ""
+
+[functions.analyze-complaint]
+entrypoint = "./functions/analyze-complaint/index.ts"
+# Public function: the frontend calls it with the anon key. The function
+# itself enforces its own input validation; the Gemini key is read from
+# edge secrets, never exposed to the caller.
+verify_jwt = false
