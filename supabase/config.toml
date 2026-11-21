@@ -6,3 +6,7 @@ entrypoint = "./functions/analyze-complaint/index.ts"
 # itself enforces its own input validation; the Gemini key is read from
 # edge secrets, never exposed to the caller.
 verify_jwt = false
+
+[functions.gemini-ping]
+entrypoint = "./functions/gemini-ping/index.ts"
+verify_jwt = false
