@@ -1,8 +1,7 @@
 import { PageContainer } from '@/components/ui/PageContainer';
-import { Card } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
-import { ListChecks, FilePlus2 } from 'lucide-react';
+import { ComplaintDashboard } from '@/features/dashboard';
+import { FilePlus2 } from 'lucide-react';
 import type { RouteId } from '@/components/layout/nav';
 
 export interface AllComplaintsProps {
@@ -10,34 +9,23 @@ export interface AllComplaintsProps {
 }
 
 /**
- * All Complaints page — layout shell only.
- *
- * Member 3 will implement the filter bar, ticket cards, and status management
- * here using the shared layout & UI components. No fake data is shown.
+ * All Complaints page.
+ * Uses the same live dashboard (table, filters, details, status management)
+ * as the Overview — a single source of truth with no duplicated state.
  */
 export function AllComplaints({ onNavigate }: AllComplaintsProps) {
   return (
     <PageContainer
       title="All Complaints"
       description="Browse, filter, and manage every submitted ticket."
+      maxWidth="wide"
       actions={
         <Button onClick={() => onNavigate('submit')} leftIcon={<FilePlus2 className="h-4 w-4" />}>
           New complaint
         </Button>
       }
     >
-      <Card padding="lg">
-        <EmptyState
-          icon={<ListChecks />}
-          title="Complaint list coming soon"
-          description="Member 3 will connect live ticket data, filters, and status management to this page. No mock data is shown."
-          action={
-            <Button variant="primary" onClick={() => onNavigate('submit')} leftIcon={<FilePlus2 className="h-4 w-4" />}>
-              Submit a complaint
-            </Button>
-          }
-        />
-      </Card>
+      <ComplaintDashboard onSubmitNew={() => onNavigate('submit')} />
     </PageContainer>
   );
 }
