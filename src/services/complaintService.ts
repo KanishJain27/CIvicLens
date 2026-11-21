@@ -7,7 +7,35 @@ import type {
   Severity,
   TicketStatus,
 } from "@/types/complaint";
-import { analyzeComplaint } from "@/services/aiService";
+import { analyzeComplaint, AiServiceError } from "@/services/aiService";
+
+/**
+ * Demo-mode fallback analysis used ONLY when the Gemini AI service is
+ * unavailable (e.g. GEMINI_API_KEY not configured). Every field is clearly
+ * labelled so the ticket is never mistaken for one the AI actually analysed.
+ * Officers must review and classify these manually.
+ */
+function pendingManualReview(description: string): ComplaintAnalysis {
+  return {
+    originalLanguage: "Pending review",
+    translatedSummary: `${description.slice(0, 280)}${description.length > 280 ? "…" : ""}`,
+    category: "Other",
+    severity: "Medium",
+    severityReason: "AI unavailable — severity pending manual officer review.",
+    department: "Municipal General Complaints",
+    suggestedAction: "AI analysis pending — officer to categorise and assign manually.",
+    confidence: "Low",
+  };
+}
+
+/** True when the AI failure is due to the service being unavailable (not a user error). */
+function isAiUnavailable(err: unknown): boolean {
+  if (err instanceof AiServiceError) {
+    // 503 = missing config, 502 = upstream Gemini failure, 0 = network unreachable
+    return err.status === 503 || err.status === 502 || err.status === 0;
+  }
+  return false;
+}
 
 /**
  * CivicLens complaint service — the single entry point Members 2 & 3 use to
@@ -76,16 +104,42 @@ function rowToTicket(row: ComplaintRow): ComplaintTicket {
  * @param input description (required) + optional image, locality, analysis,
  *              and possibleDuplicateOf.
  */
+/** Result of createComplaintTicket: the persisted ticket + whether AI was skipped. */
+export interface CreateTicketResult {
+  ticket: ComplaintTicket;
+  /** True when Gemini was unavailable and the analysis is a pending-review placeholder. */
+  aiPending: boolean;
+}
+
 export async function createComplaintTicket(
   input: ComplaintInput
-): Promise<ComplaintTicket> {
+): Promise<CreateTicketResult> {
   const description = (input.description ?? "").trim();
   if (!description) {
     throw new Error("Complaint description is required.");
   }
 
-  const analysis: ComplaintAnalysis =
-    input.analysis ?? (await analyzeComplaint(description, input.image));
+  let analysis: ComplaintAnalysis;
+  let aiPending = false;
+
+  if (input.analysis) {
+    analysis = input.analysis;
+  } else {
+    try {
+      analysis = await analyzeComplaint(description, input.image);
+    } catch (err) {
+      // Gemini unavailable (no API key / network) → demo mode.
+      // The ticket is still created so the complaint is recorded, but every
+      // analysis field is clearly marked as pending manual officer review.
+      if (isAiUnavailable(err)) {
+        analysis = pendingManualReview(description);
+        aiPending = true;
+      } else {
+        // Real client-side validation error (e.g. empty description) — surface it.
+        throw err;
+      }
+    }
+  }
 
   const insertRow = {
     description,
@@ -115,7 +169,8 @@ export async function createComplaintTicket(
     );
   }
 
-  return rowToTicket(data as ComplaintRow);
+  const ticket = rowToTicket(data as ComplaintRow);
+  return { ticket, aiPending };
 }
 
 /**

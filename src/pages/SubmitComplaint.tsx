@@ -66,6 +66,7 @@ export function SubmitComplaint({ onSubmitted, onGoToComplaints }: SubmitComplai
   const [phase, setPhase] = useState<Phase>('idle');
   const [statusLabel, setStatusLabel] = useState('Submitting your complaint…');
   const [ticket, setTicket] = useState<ComplaintTicket | null>(null);
+  const [aiPending, setAiPending] = useState(false);
 
   const [dupResult, setDupResult] = useState<DuplicateDetectionResult | null>(null);
   const [dupModalOpen, setDupModalOpen] = useState(false);
@@ -139,24 +140,32 @@ export function SubmitComplaint({ onSubmitted, onGoToComplaints }: SubmitComplai
         }
       }
 
-      // Upload image first, if present.
+      // Upload image first, if present. Storage failures are non-fatal —
+      // the complaint is still recorded as a text-only ticket.
       let imageUrl: string | undefined;
       if (file) {
         setStatusLabel('Uploading photo…');
-        imageUrl = await uploadComplaintImage(file);
+        try {
+          imageUrl = await uploadComplaintImage(file);
+        } catch (uploadErr) {
+          // Photo upload failed (e.g. storage bucket not provisioned).
+          // Continue without the image rather than blocking the whole complaint.
+          console.warn('Image upload failed, continuing as text-only:', uploadErr);
+        }
       }
 
-      // Create ticket (AI analysis runs inside this call).
+      // Create ticket (AI analysis runs inside this call, with demo-mode fallback).
       setStatusLabel('AI is analysing & categorising your complaint…');
-      const created = await createComplaintTicket({
+      const result = await createComplaintTicket({
         ...baseInput,
         image: imageUrl,
         possibleDuplicateOf: dupResult?.matches[0]?.ticket.id,
       });
 
-      setTicket(created);
+      setTicket(result.ticket);
+      setAiPending(result.aiPending);
       setPhase('success');
-      onSubmitted?.(created);
+      onSubmitted?.(result.ticket);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Something went wrong. Please try again.';
@@ -211,7 +220,7 @@ export function SubmitComplaint({ onSubmitted, onGoToComplaints }: SubmitComplai
 
       {/* SUCCESS STATE */}
       {phase === 'success' && ticket ? (
-        <SuccessView ticket={ticket} onGoToComplaints={onGoToComplaints} onSubmitAnother={() => { resetForm(); setTicket(null); setPhase('idle'); }} />
+        <SuccessView ticket={ticket} aiPending={aiPending} onGoToComplaints={onGoToComplaints} onSubmitAnother={() => { resetForm(); setTicket(null); setAiPending(false); setPhase('idle'); }} />
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <Card padding="lg">
@@ -384,10 +393,12 @@ export function SubmitComplaint({ onSubmitted, onGoToComplaints }: SubmitComplai
 /** Success screen shown after a ticket is created. */
 function SuccessView({
   ticket,
+  aiPending,
   onGoToComplaints,
   onSubmitAnother,
 }: {
   ticket: ComplaintTicket;
+  aiPending: boolean;
   onGoToComplaints?: () => void;
   onSubmitAnother: () => void;
 }) {
@@ -435,6 +446,27 @@ function SuccessView({
           </div>
         </div>
       </Card>
+
+      {/* Demo-mode banner when AI was unavailable */}
+      {aiPending && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-warning-300 bg-warning-50 px-4 py-3 animate-slide-up"
+        >
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning-600" />
+          <div className="flex flex-col gap-0.5">
+            <p className="text-sm font-medium text-warning-800">
+              AI analysis pending — demo mode
+            </p>
+            <p className="text-sm text-warning-700">
+              The Gemini AI service is not configured, so this complaint was saved with
+              placeholder analysis fields. An officer must review and classify it manually.
+              Once <code className="font-mono text-xs">GEMINI_API_KEY</code> is added to the
+              Supabase project, new complaints will be analysed automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* AI analysis result */}
       <Card padding="lg">
