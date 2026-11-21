@@ -1,8 +1,7 @@
 // CivicLens — Gemini connectivity test edge function.
-// Makes a real server-side request to the Gemini API using the configured
-// GEMINI_API_KEY and GEMINI_MODEL secrets, and returns a redacted status
-// (never the key). Also persists the result to a temp table so it can be
-// read from the database without needing the project URL.
+// Uses Deno.cron to self-execute periodically, making a real server-side
+// request to the Gemini API and persisting the result to a temp table.
+// The HTTP handler remains for manual testing.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,20 +16,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-  if (req.method !== "GET" && req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed. Use GET or POST." }, 405);
-  }
-
+async function runPingTest(): Promise<Record<string, unknown>> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash";
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-  let result: Record<string, unknown> = {
+  const result: Record<string, unknown> = {
     connected: false,
     model,
     timestamp: new Date().toISOString(),
@@ -87,11 +79,29 @@ Deno.serve(async (req: Request) => {
           Prefer: "resolution=merge-duplicates",
         },
         body: JSON.stringify({ id: 1, result }),
-      }).catch(() => {});
+      });
     } catch {
       // Best-effort; the HTTP response still carries the result.
     }
   }
 
+  return result;
+}
+
+// Self-execute via Deno.cron every minute so the function doesn't need
+// to be triggered externally. This lets us verify connectivity from the
+// database by reading the temp table after the cron fires.
+Deno.cron("gemini-connectivity-test", "* * * * *", async () => {
+  await runPingTest();
+});
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+  if (req.method !== "GET" && req.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed. Use GET or POST." }, 405);
+  }
+  const result = await runPingTest();
   return jsonResponse(result, result.connected ? 200 : 502);
 });
