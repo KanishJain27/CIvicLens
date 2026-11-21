@@ -27,16 +27,19 @@ Deno.serve(async (req: Request) => {
 
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash";
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-  let result: Record<string, unknown> = { connected: false, model, timestamp: new Date().toISOString() };
-
-  // Also report which Supabase env vars are available (redacted, no values).
-  result.envPresent = {
-    SUPABASE_URL: !!Deno.env.get("SUPABASE_URL"),
-    SUPABASE_SERVICE_ROLE_KEY: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-    SUPABASE_ANON_KEY: !!Deno.env.get("SUPABASE_ANON_KEY"),
-    GEMINI_API_KEY: !!Deno.env.get("GEMINI_API_KEY"),
-    GEMINI_MODEL: Deno.env.get("GEMINI_MODEL") || "(not set, will use default)",
+  let result: Record<string, unknown> = {
+    connected: false,
+    model,
+    timestamp: new Date().toISOString(),
+    envPresent: {
+      SUPABASE_URL: !!supabaseUrl,
+      SUPABASE_SERVICE_ROLE_KEY: !!serviceKey,
+      GEMINI_API_KEY: !!apiKey,
+      GEMINI_MODEL: Deno.env.get("GEMINI_MODEL") || "(not set)",
+    },
   };
 
   if (!apiKey) {
@@ -59,36 +62,35 @@ Deno.serve(async (req: Request) => {
       if (!geminiRes.ok) {
         const errText = await geminiRes.text();
         result.httpStatus = geminiRes.status;
-        result.error = errText.slice(0, 300);
+        result.error = errText.slice(0, 500);
       } else {
         const data = await geminiRes.json();
         const reply: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         result.connected = true;
         result.reply = (reply ?? "").trim().slice(0, 50);
+        result.fullResponse = JSON.stringify(data).slice(0, 1000);
       }
     } catch (err) {
-      result.error = (err as Error).message.slice(0, 300);
+      result.error = (err as Error).message.slice(0, 500);
     }
   }
 
-  // Persist result to a temp table so it can be read via SQL.
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (supabaseUrl && serviceKey) {
+  // Persist result to the temp table via the REST API.
+  if (supabaseUrl && serviceKey) {
+    try {
       await fetch(`${supabaseUrl}/rest/v1/_gemini_ping_result?on_conflict=id`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": serviceKey,
-          "Authorization": `Bearer ${serviceKey}`,
-          "Prefer": "resolution=merge-duplicates",
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          Prefer: "resolution=merge-duplicates",
         },
         body: JSON.stringify({ id: 1, result }),
       }).catch(() => {});
+    } catch {
+      // Best-effort; the HTTP response still carries the result.
     }
-  } catch {
-    // Best-effort persistence; the HTTP response still carries the result.
   }
 
   return jsonResponse(result, result.connected ? 200 : 502);
