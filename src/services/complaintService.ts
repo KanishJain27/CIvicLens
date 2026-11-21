@@ -1,4 +1,4 @@
-import { supabase, COMPLAINTS_TABLE } from "@/lib/supabase";
+import { supabase, COMPLAINTS_TABLE, COMPLAINTS_BUCKET } from "@/lib/supabase";
 import type {
   ComplaintAnalysis,
   ComplaintInput,
@@ -255,9 +255,6 @@ export async function flagDuplicate(
  * @returns a public URL that can be stored on the ticket and rendered in the dashboard.
  */
 export async function uploadComplaintImage(file: File): Promise<string> {
-  // Lazy import to avoid pulling storage types into every consumer.
-  const { COMPLAINTS_BUCKET } = await import("@/lib/supabase");
-
   const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const path = `${crypto.randomUUID()}.${ext}`;
 
